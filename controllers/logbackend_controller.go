@@ -158,7 +158,7 @@ func (sb *SingleLogBackend) Start() {
 		return
 	}
 	// 关闭句柄
-	defer file.close()
+	defer file.Close()
 
 	writer := bufio.NewWriterSize(file, sb.BufferSize)
 
