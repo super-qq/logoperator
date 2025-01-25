@@ -114,8 +114,6 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
-
 	uniqueName := req.String()
 
 	// 获取Annotations中存储的spec对象，如果这个对象没有，说明就是新增
@@ -139,6 +137,8 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		go slb.Start()
 		return ctrl.Result{}, nil
 	}
+
+	return ctrl.Result{}, nil
 
 }
 
