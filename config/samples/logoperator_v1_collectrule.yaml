@@ -1,0 +1,6 @@
+apiVersion: logoperator.qi1999.io/v1
+kind: CollectRule
+metadata:
+  name: collectrule-sample
+spec:
+  # TODO(user): Add fields here

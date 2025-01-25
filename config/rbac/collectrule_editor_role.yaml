@@ -1,0 +1,24 @@
+# permissions for end users to edit collectrules.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: collectrule-editor-role
+rules:
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - collectrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - collectrules/status
+  verbs:
+  - get

@@ -1,0 +1,24 @@
+# permissions for end users to edit logbackends.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logbackend-editor-role
+rules:
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - logbackends
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - logbackends/status
+  verbs:
+  - get

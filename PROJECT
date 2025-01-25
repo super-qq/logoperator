@@ -1,0 +1,25 @@
+domain: qi1999.io
+layout:
+- go.kubebuilder.io/v3
+projectName: logoperator
+repo: qi1999.io/logoperator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: qi1999.io
+  group: logoperator
+  kind: LogBackend
+  path: qi1999.io/logoperator/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: qi1999.io
+  group: logoperator
+  kind: CollectRule
+  path: qi1999.io/logoperator/api/v1
+  version: v1
+version: "3"
