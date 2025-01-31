@@ -135,6 +135,13 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
+		instance.Status.SyncPhase = logoperatorv1.StatusLogBackendRunning
+		err = r.Status().Update(ctx, instance)
+		if err != nil {
+			klog.Errorf("[logbackend.updateStatus.err][ns:%v][LogBackend:%v][err:%v]", req.Namespace, req.Name, err)
+			return reconcile.Result{}, err
+		}
+		klog.Infof("[LogBackend.New.Add.success][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 		return ctrl.Result{}, nil
 	}
 

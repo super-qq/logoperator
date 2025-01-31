@@ -31,16 +31,25 @@ type LogBackendSpec struct {
 	// Foo is an example field of LogBackend. Edit logbackend_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
 
-        BufferSize int `json:"bufferSize"`
-        FlushSecondInterval int `json:"flushSecondInterval"`
-
+	BufferSize          int `json:"bufferSize"`
+	FlushSecondInterval int `json:"flushSecondInterval"`
 }
 
 // LogBackendStatus defines the observed state of LogBackend
 type LogBackendStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	SyncPhase LogBackendSyncPhase `json:"syncPhase"`
 }
+
+type LogBackendSyncPhase string
+
+const (
+	StatusLogBackendPending  LogBackendSyncPhase = "Pending"
+	StatusLogBackendRunning  LogBackendSyncPhase = "Running"
+	StatusLogBackendDeleting LogBackendSyncPhase = "Deleting"
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
