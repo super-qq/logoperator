@@ -135,6 +135,7 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
+		instance.Status.LastDeployTime = &metav1.Time{Time: time.Now().UTC()}
 		instance.Status.SyncPhase = logoperatorv1.StatusLogBackendRunning
 		err = r.Status().Update(ctx, instance)
 		if err != nil {

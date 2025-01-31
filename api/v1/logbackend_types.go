@@ -40,7 +40,8 @@ type LogBackendStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	SyncPhase LogBackendSyncPhase `json:"syncPhase"`
+	SyncPhase      LogBackendSyncPhase `json:"syncPhase"`
+	LastDeployTime *metav1.Time        `json:"lastDeployTime"`
 }
 
 type LogBackendSyncPhase string
@@ -51,9 +52,11 @@ const (
 	StatusLogBackendDeleting LogBackendSyncPhase = "Deleting"
 )
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.syncPhase`
+// +kubebuilder:printcolumn:name="LastDeployTime",type="date",JSONPath=".status.lastDeployTime"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // LogBackend is the Schema for the logbackends API
 type LogBackend struct {
 	metav1.TypeMeta   `json:",inline"`
