@@ -57,6 +57,7 @@ const (
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.syncPhase`
 // +kubebuilder:printcolumn:name="LastDeployTime",type="date",JSONPath=".status.lastDeployTime"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:shortName=lb
 // LogBackend is the Schema for the logbackends API
 type LogBackend struct {
 	metav1.TypeMeta   `json:",inline"`

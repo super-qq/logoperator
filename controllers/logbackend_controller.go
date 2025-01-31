@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logoperatorv1 "qi1999.io/logoperator/api/v1"
 )
 
@@ -135,8 +136,8 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
-		instance.Status.LastDeployTime = &metav1.Time{Time: time.Now().UTC()}
 		instance.Status.SyncPhase = logoperatorv1.StatusLogBackendRunning
+		instance.Status.LastDeployTime = &metav1.Time{Time: time.Now().UTC()}
 		err = r.Status().Update(ctx, instance)
 		if err != nil {
 			klog.Errorf("[logbackend.updateStatus.err][ns:%v][LogBackend:%v][err:%v]", req.Namespace, req.Name, err)
