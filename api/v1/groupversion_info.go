@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1 contains API Schema definitions for the logoperator v1 API group
-//+kubebuilder:object:generate=true
-//+groupName=logoperator.qi1999.io
+// +kubebuilder:object:generate=true
+// +groupName=logoperator.qi1999.io
 package v1
 
 import (
