@@ -104,6 +104,7 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// 获取这个LogBackend crd ,这里是检查这个 crd资源是否存在
 	instance := &logoperatorv1.LogBackend{}
+	klog.Infof("[Reconcile call start][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
