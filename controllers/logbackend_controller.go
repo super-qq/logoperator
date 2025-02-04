@@ -19,6 +19,7 @@ package controllers
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -136,6 +137,23 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
+		// 3. 关联 Annotations
+		data, err := json.Marshal(instance.Spec)
+		if err != nil {
+			klog.Error(err, "LogBackend.Spec.json.Marshal.err")
+			return reconcile.Result{}, nil
+		}
+		klog.Info("create.LogBackend.Spec.data.string", "spce", string(data))
+		if instance.Annotations != nil {
+			instance.Annotations["spec"] = string(data)
+		} else {
+			instance.Annotations = map[string]string{"spec": string(data)}
+		}
+		if err := r.Client.Update(context.TODO(), instance); err != nil {
+			klog.Errorf("LogBackend.update.err[ns:%v][LogBackend:%v]", req.Namespace, req.Name)
+			return reconcile.Result{}, err
+		}
+		klog.Infof("[LogBackend.update.success][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 		instance.Status.SyncPhase = logoperatorv1.StatusLogBackendRunning
 		instance.Status.LastDeployTime = &metav1.Time{Time: time.Now().UTC()}
 		err = r.Status().Update(ctx, instance)
