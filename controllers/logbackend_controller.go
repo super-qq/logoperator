@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
@@ -123,7 +124,7 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	//
 	// oldspec := &logoperatorv1.LogBackendSpec{}
 	// specStr,
-	_, exists := instance.Annotations["spec"]
+	specStr, exists := instance.Annotations["spec"]
 	if !exists {
 
 		klog.Infof("[LogBackend.New.Add.success][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
@@ -138,6 +139,7 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
+
 		// 3. 关联 Annotations
 		data, err := json.Marshal(instance.Spec)
 		if err != nil {
@@ -165,6 +167,47 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		klog.Infof("[LogBackend.New.Add.success][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 		return ctrl.Result{}, nil
 	}
+
+	oldspec := &logoperatorv1.LogBackendSpec{}
+	// 走到这里说明spec str存在，需要对比一下是否变更了
+	if err := json.Unmarshal([]byte(specStr), &oldspec); err != nil {
+		klog.Errorf("[LogBackend.oldspec.json.Unmarshal.err][ns:%v][LogBackend:%v][err:%v]", req.Namespace, req.Name, err)
+		return reconcile.Result{}, err
+	}
+	// 没变化
+	if reflect.DeepEqual(instance.Spec, oldspec) {
+		klog.Errorf("[LogBackend.reflect.DeepEqual][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
+		return ctrl.Result{}, nil
+	}
+
+	// 变化了
+	specOldData := instance.Annotations["spec"]
+	specNewData, _ := json.Marshal(instance.Spec)
+	klog.V(2).Infof("LogBackend.instance.Spec.data.diff[ns:%v][LogBackend:%v[specOldData:%v][specNewData:%v]", req.Namespace, req.Name, specOldData, string(specNewData))
+
+	oldSlb, ok := LBM.LogBackendGet(uniqueName)
+	if !ok {
+		klog.Errorf("[LogBackend.notfoundInlocal.DeepEqual][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
+		return ctrl.Result{}, nil
+	}
+	// 先停止旧的
+	oldSlb.Stop()
+	// 在map中删除
+	LBM.LogBackendDelete(uniqueName)
+	klog.Infof("LogBackend.Update.old.stop[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, oldSlb)
+
+	// 开启新的
+	newSlb := &SingleLogBackend{
+		WriteQ:              make(chan string, instance.Spec.BufferSize),
+		BufferSize:          instance.Spec.BufferSize,
+		FlushSecondInterval: instance.Spec.FlushSecondInterval,
+		Name:                uniqueName,
+		FilePath:            fmt.Sprintf("%s-%s.log", instance.Namespace, instance.Name),
+		QuitQ:               nil,
+	}
+	LBM.LogBackendSet(uniqueName, newSlb)
+	go oldSlb.Start()
+	klog.Infof("LogBackend.Update.new.start[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, newSlb)
 
 	return ctrl.Result{}, nil
 
