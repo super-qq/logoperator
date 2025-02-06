@@ -120,6 +120,34 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	uniqueName := req.String()
 
+	// 处理删除的逻辑，定义1个finalizers
+	myFinalizerName := "storage.finalizers.qi1999.io"
+
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		// DeletionTimestamp为0 说明不是删除的，需要判断对象原有的Finalizers有没有上面定义的
+		if !containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, myFinalizerName)
+			if err := r.Update(context.Background(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// 有DeletionTimestamp说明要删除,比如，离职审批
+		if containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
+			// 新增一个deleteExternalDependency 来模拟删除这个lb时很慢
+			if err := r.deleteExternalDependency(instance); err != nil {
+				klog.Errorf("[deleteExternalDependency.to.lb.err][err:%v][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
+				return reconcile.Result{}, err
+			}
+			// removeString 把myFinalizerName从Finalizers列表中移除，因为我们已经执行完了，然后更新对象
+			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, myFinalizerName)
+			if err := r.Update(context.Background(), instance); err != nil {
+				klog.Errorf("[deleteExternalDependency.exec.success.update.lb.error][err:%v][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// 获取Annotations中存储的spec对象，如果这个对象没有，说明就是新增
 	//
 	// oldspec := &logoperatorv1.LogBackendSpec{}
@@ -284,4 +312,31 @@ func (sb *SingleLogBackend) Start() {
 func (sb *SingleLogBackend) Stop() {
 	klog.Infof("[SingleLogBackend.stop][sb:%v]", sb.Name)
 	close(sb.QuitQ)
+}
+
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *LogBackendReconciler) deleteExternalDependency(instance *logoperatorv1.LogBackend) error {
+
+	klog.Infof("start deleting the external dependencies for lb:%v", instance.Name)
+	time.Sleep(10 * time.Second)
+	klog.Infof("end deleting the external dependencies for lb:%v", instance.Name)
+	return nil
+}
+
+func removeString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
 }
