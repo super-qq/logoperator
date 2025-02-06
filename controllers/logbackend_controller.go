@@ -139,6 +139,20 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				klog.Errorf("[deleteExternalDependency.to.lb.err][err:%v][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
 				return reconcile.Result{}, err
 			}
+
+			oldSlb, ok := LBM.LogBackendGet(uniqueName)
+			if !ok {
+				klog.Errorf("[LogBackend.Delete.notfound.Inlocal.error][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
+				return ctrl.Result{}, nil
+			}
+			// 先停止旧的
+			oldSlb.Stop()
+			// 在map中删除
+			LBM.LogBackendDelete(uniqueName)
+			klog.Infof("LogBackend.Delete.old.stop[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, oldSlb)
+			// 增加一个sleep ，模拟很慢，并且把原来的deleteExternalDependency注释掉
+			time.Sleep(10 * time.Second)
+
 			// removeString 把myFinalizerName从Finalizers列表中移除，因为我们已经执行完了，然后更新对象
 			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, myFinalizerName)
 			if err := r.Update(context.Background(), instance); err != nil {
