@@ -175,7 +175,7 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, err
 	}
 	// 没变化
-	if reflect.DeepEqual(instance.Spec, oldspec) {
+	if reflect.DeepEqual(&instance.Spec, oldspec) {
 		klog.Errorf("[LogBackend.reflect.DeepEqual][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 		return ctrl.Result{}, nil
 	}
@@ -203,11 +203,22 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		FlushSecondInterval: instance.Spec.FlushSecondInterval,
 		Name:                uniqueName,
 		FilePath:            fmt.Sprintf("%s-%s.log", instance.Namespace, instance.Name),
-		QuitQ:               nil,
+		QuitQ:               make(chan struct{}),
 	}
 	LBM.LogBackendSet(uniqueName, newSlb)
-	go oldSlb.Start()
+	go newSlb.Start()
 	klog.Infof("LogBackend.Update.new.start[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, newSlb)
+
+	if instance.Annotations != nil {
+		instance.Annotations["spec"] = string(specNewData)
+	} else {
+		instance.Annotations = map[string]string{"spec": string(specNewData)}
+	}
+	if err := r.Client.Update(context.TODO(), instance); err != nil {
+		klog.Errorf("LogBackend.update.err[ns:%v][LogBackend:%v]", req.Namespace, req.Name)
+		return reconcile.Result{}, nil
+	}
+	klog.Infof("[LogBackend.Update.updateSpec.success][ns:%v][LogBackend:%v]", req.Namespace, req.Name)
 
 	return ctrl.Result{}, nil
 
