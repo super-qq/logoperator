@@ -31,12 +31,12 @@ type CollectRuleSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of CollectRule. Edit collectrule_types.go to remove/update
-	LogBackend        string                `json:"logBackend"`         // 指定的日志后端
-	TargetNamespace   string                `json:"targetNamespace"`    // 过滤的ns
-	Selector          *metav1.LabelSelector `json:"selector,omitempty"` // 过滤pod的标签
-	CollectPattern    string                `json:"collectPattern"`     // 配置的采集正则表达式
-	CollectPatternReg *regexp.Regexp        `json:"-" yaml:"-" `        //给内部用的采集正则表达式
-	LogAlert          *LogAlertObj          `json:"logAlert"`           // 日志告警的配置
+	LogBackend      string                `json:"logBackend"`         // 指定的日志后端
+	TargetNamespace string                `json:"targetNamespace"`    // 过滤的ns
+	Selector        *metav1.LabelSelector `json:"selector,omitempty"` // 过滤pod的标签
+	CollectPattern  string                `json:"collectPattern"`     // 配置的采集正则表达式
+	//CollectPatternReg *regexp.Regexp        `json:"-" yaml:"-" `        //给内部用的采集正则表达式
+	LogAlert *LogAlertObj `json:"logAlert"` // 日志告警的配置
 }
 
 type LogAlertObj struct {

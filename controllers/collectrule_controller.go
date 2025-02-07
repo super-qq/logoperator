@@ -17,18 +17,26 @@ limitations under the License.
 package controllers
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"io"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientsetCore "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	logoperatorv1 "qi1999.io/logoperator/api/v1"
 )
 
 // CollectRuleReconciler reconciles a CollectRule object
 type CollectRuleReconciler struct {
+	CoreClientSet *clientsetCore.Clientset // 操作core 对象的client
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -47,11 +55,72 @@ type CollectRuleReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	// 获取这个CollectRule crd ,这里是检查这个 crd资源是否存在
+	instance := &logoperatorv1.CollectRule{}
 
-	// TODO(user): your logic here
+	klog.Infof("[Reconcile call  start][ns:%v][CollectRule:%v]", req.Namespace, req.Name)
+	// 唯一的标识 ，这里用namespace+name 是为了防止同名对象出现在多个ns中
+	//uniqueName := req.NamespacedName.String()
+	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			klog.Errorf("[ Reconcile start missing be deleted][ns:%v][CollectRule:%v]", req.Namespace, req.Name)
+			// 如果错误是不存在，那么可能是到调谐这里 就被删了
+			return reconcile.Result{}, nil
+		}
+		// 其它错误打印一下
+		klog.Errorf("[ Reconcile start other error][err:%v][ns:%v][CollectRule:%v]", err, req.Namespace, req.Name)
+		return reconcile.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	oldspec := &logoperatorv1.CollectRuleSpec{}
+	specStr, exists := instance.Annotations["spec"]
+	fmt.Println(oldspec, specStr)
+	if !exists {
+
+		// 处理新增的逻辑
+		//klog.Infof("[CollectRule.New.Add.success][ns:%v][CollectRule:%v]", req.Namespace, req.Name)
+		// 首先根据 yaml配置的labelSelector 获取对应的pod
+		podList := &corev1.PodList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(instance.Spec.TargetNamespace),
+			client.MatchingLabels(instance.Spec.Selector.MatchLabels),
+		}
+		if err = r.List(ctx, podList, listOpts...); err != nil {
+			klog.Errorf("[ Failed to list pods][ns:%v][CollectRule:%v][err:%v]", req.Namespace, req.Name, err)
+			return ctrl.Result{}, err
+		}
+		klog.Infof("[CollectRule.New.Get.pod.result][ns:%v][CollectRule:%v][podNum:%v]", req.Namespace, req.Name, len(podList.Items))
+
+		for _, p := range podList.Items {
+			p := p
+			klog.Infof("[CollectRule.New.Get.pod.result.one][ns:%v][CollectRule:%v][pod:%v]", req.Namespace, req.Name, p.Name)
+			opts := &corev1.PodLogOptions{
+				Follow: false, // 对应kubectl logs -f参数
+			}
+			logRequest := r.CoreClientSet.CoreV1().Pods(instance.Spec.TargetNamespace).GetLogs(p.Name, opts)
+			readCloser, err := logRequest.Stream(context.TODO())
+			if err != nil {
+				klog.Errorf("[CollectRule.New.pod.GetLogs.err][ns:%v][CollectRule:%v][pod:%v][err:%v]", req.Namespace, req.Name, p.Name, err)
+				continue
+			}
+			r := bufio.NewReader(readCloser)
+			for {
+				bytes, err := r.ReadBytes('\n')
+				klog.Infof("[CollectRule.New.pod.GetLogs.line.print][ns:%v][CollectRule:%v][pod:%v][line:%v]", req.Namespace, req.Name, p.Name, string(bytes))
+				if err != nil {
+					if err != io.EOF {
+						break
+					}
+					break
+				}
+			}
+			readCloser.Close()
+		}
+
+	}
+
+	return reconcile.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
