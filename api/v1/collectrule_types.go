@@ -17,8 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"regexp"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,9 +38,9 @@ type CollectRuleSpec struct {
 }
 
 type LogAlertObj struct {
-	Url               string         `json:"url"`
-	KeyWordPattern    string         `json:"keyWordPattern"` // 配置的告警正则表达式
-	KeyWordPatternReg *regexp.Regexp `json:"-" yaml:"-" `    //给内部用的告警正则表达式
+	Url            string `json:"url"`
+	KeyWordPattern string `json:"keyWordPattern"` // 配置的告警正则表达式
+	//KeyWordPatternReg *regexp.Regexp `json:"-" yaml:"-" `    //给内部用的告警正则表达式
 }
 
 type CollectRulePhase string
