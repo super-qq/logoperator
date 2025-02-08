@@ -84,7 +84,7 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		podList := &corev1.PodList{}
 		listOpts := []client.ListOption{
 			client.InNamespace(instance.Spec.TargetNamespace),
-			client.MatchingLabels(instance.Spec.Selector.MatchLabels),
+			client.MatchingLabels(instance.Spec.Selector),
 		}
 		if err = r.List(ctx, podList, listOpts...); err != nil {
 			klog.Errorf("[ Failed to list pods][ns:%v][CollectRule:%v][err:%v]", req.Namespace, req.Name, err)
