@@ -72,6 +72,16 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	klog.InitFlags(flag.CommandLine)
 	flag.Parse()
+
+	//检查日志目录是否存在
+	if _, err := os.Stat(logbackendDir); err != nil {
+		klog.Infof("path not exists need create %v", logbackendDir)
+		err := os.MkdirAll(logbackendDir, 0711)
+		if err != nil {
+			panic("Error creating directory")
+		}
+	}
+
 	go wait.Until(klog.Flush, *logFlushFreq, wait.NeverStop)
 	defer klog.Flush()
 
