@@ -153,62 +153,31 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		//return reconcile.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
+	slb, exists := LBM.LogBackendGet(lbUniqueName)
+
+	if !exists {
+		klog.Errorf("[slb.not.exist.in.localMap.mayBe.lb.controller.delay][ns:%v][CollectRule:%v][lb:%v]", req.Namespace, req.Name, lbKey)
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	scr := &SingleCollectRule{
+		Name:          instance.Name,
+		Spec:          instance.Spec,
+		Slb:           slb,
+		CoreClientSet: r.CoreClientSet,
+		Ctx:           ctx,
+		QuitQ:         make(chan struct{}),
+	}
 	oldspec := &logoperatorv1.CollectRuleSpec{}
 	specStr, exists := instance.Annotations["spec"]
 	fmt.Println(oldspec, specStr)
 	if !exists {
-
-		// 处理新增的逻辑
-		//klog.Infof("[CollectRule.New.Add.success][ns:%v][CollectRule:%v]", req.Namespace, req.Name)
-		// 首先根据 yaml配置的labelSelector 获取对应的pod
-		podList := &corev1.PodList{}
-		listOpts := []client.ListOption{
-			client.InNamespace(instance.Spec.TargetNamespace),
-			client.MatchingLabels(instance.Spec.Selector),
-		}
-		if err = r.List(ctx, podList, listOpts...); err != nil {
-			klog.Errorf("[ Failed to list pods][ns:%v][CollectRule:%v][err:%v]", req.Namespace, req.Name, err)
-			return ctrl.Result{}, err
-		}
-		klog.Infof("[CollectRule.New.Get.pod.result][ns:%v][CollectRule:%v][podNum:%v]", req.Namespace, req.Name, len(podList.Items))
-
-		for _, p := range podList.Items {
-			p := p
-			klog.Infof("[CollectRule.New.Get.pod.result.one][ns:%v][CollectRule:%v][pod:%v]", req.Namespace, req.Name, p.Name)
-			opts := &corev1.PodLogOptions{
-				Follow: false, // 对应kubectl logs -f参数
-			}
-			logRequest := r.CoreClientSet.CoreV1().Pods(instance.Spec.TargetNamespace).GetLogs(p.Name, opts)
-			readCloser, err := logRequest.Stream(context.TODO())
-			if err != nil {
-				klog.Errorf("[CollectRule.New.pod.GetLogs.err][ns:%v][CollectRule:%v][pod:%v][err:%v]", req.Namespace, req.Name, p.Name, err)
-				continue
-			}
-			r := bufio.NewReader(readCloser)
-			for {
-				bytes, err := r.ReadBytes('\n')
-				klog.Infof("[CollectRule.New.pod.GetLogs.line.print][ns:%v][CollectRule:%v][pod:%v][line:%v]", req.Namespace, req.Name, p.Name, string(bytes))
-				if err != nil {
-					if err != io.EOF {
-						break
-					}
-					break
-				}
-			}
-			readCloser.Close()
-
-		}
-
+		go scr.Start()
+		CLM.CollectRuleSet(instance.Name, scr)
+		klog.Infof("[CollectRule.New.Add.success][ns:%v][CollectRule:%v	]", req.Namespace, req.Name)
 	}
 
 	return reconcile.Result{}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *CollectRuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&logoperatorv1.CollectRule{}).
-		Complete(r)
 }
 
 func (sr *SingleCollectRule) Stop() {
@@ -284,4 +253,11 @@ func (sr *SingleCollectRule) Start() {
 			}
 		}
 	}
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *CollectRuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&logoperatorv1.CollectRule{}).
+		Complete(r)
 }
