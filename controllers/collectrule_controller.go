@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientsetCore "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -73,6 +74,24 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return reconcile.Result{}, err
 	}
 
+	// 获取配置的logbackend crd 是否存在
+	lb := &logoperatorv1.LogBackend{}
+
+	lbKey := types.NamespacedName{
+		Namespace: instance.Spec.TargetNamespace,
+		Name:      instance.Spec.LogBackend,
+	}
+	lbUniqueName := lbKey.String()
+	fmt.Print(lbUniqueName)
+	err = r.Client.Get(context.TODO(), lbKey, lb)
+	if err != nil {
+
+		// 这里不需要再判断是否是 未找到了，因为网络错误和未找到都相当于 lb不存在，需要再入队判断
+		klog.Errorf("[ get LogBackend for CollectRule error][err:%v][ns:%v][CollectRule:%v][lb:%v]", err, req.Namespace, req.Name, lbKey)
+		return reconcile.Result{}, err
+		//return reconcile.Result{RequeueAfter: time.Second * 5}, nil
+	}
+
 	oldspec := &logoperatorv1.CollectRuleSpec{}
 	specStr, exists := instance.Annotations["spec"]
 	fmt.Println(oldspec, specStr)
@@ -116,6 +135,7 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			}
 			readCloser.Close()
+
 		}
 
 	}
