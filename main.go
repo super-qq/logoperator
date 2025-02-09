@@ -58,6 +58,9 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var logFlushFreq = pflag.Duration("log-flush-frequency", 5*time.Second, "Maximum number of seconds between log flushes")
+	// 新增一个日志写入的目录的命令行参数,并且默认值是.log
+	var logbackendDir string
+	flag.StringVar(&logbackendDir, "logbackend-dir", "./log", "The dir to write logbackend log file")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -89,8 +92,9 @@ func main() {
 	// 初始化core client config来自ctrl.GetConfigOrDie
 	coreClientSet := clientsetCore.NewForConfigOrDie(ctrl.GetConfigOrDie())
 	if err = (&controllers.LogBackendReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		LogbackendDir: logbackendDir,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LogBackend")
 		os.Exit(1)

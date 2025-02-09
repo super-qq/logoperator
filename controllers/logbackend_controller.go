@@ -40,7 +40,8 @@ import (
 // LogBackendReconciler reconciles a LogBackend object
 type LogBackendReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	LogbackendDir string
 }
 
 var LBM *LogBackendManager
@@ -86,6 +87,19 @@ type SingleLogBackend struct {
 	Name                string      // 名字
 	FilePath            string      // 日志文件地址
 	QuitQ               chan struct{}
+}
+
+// 封装一个初始化单一写入后端的方法
+func NewSingleLogBackend(buffsize int, flushSecondInterval int, name string, filePath string) *SingleLogBackend {
+	return &SingleLogBackend{
+		WriteQ:              make(chan string, buffsize),
+		BufferSize:          buffsize,
+		FlushSecondInterval: flushSecondInterval,
+		Name:                name,
+		FilePath:            filePath,
+		QuitQ:               make(chan struct{}),
+	}
+
 }
 
 //+kubebuilder:rbac:groups=logoperator.qi1999.io,resources=logbackends,verbs=get;list;watch;create;update;patch;delete
@@ -171,14 +185,13 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		klog.Infof("[LogBackend.New.Add.success][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
 		// 说明就是新增,处理新增的逻辑
-		slb := &SingleLogBackend{
-			WriteQ:              make(chan string, instance.Spec.BufferSize),
-			BufferSize:          instance.Spec.BufferSize,
-			FlushSecondInterval: instance.Spec.FlushSecondInterval,
-			Name:                uniqueName,
-			FilePath:            fmt.Sprintf("%s-%s.log", instance.Namespace, instance.Name),
-			QuitQ:               make(chan struct{}),
-		}
+		slb := NewSingleLogBackend(
+			instance.Spec.BufferSize,
+			instance.Spec.FlushSecondInterval,
+			uniqueName,
+			fmt.Sprintf("%s/%s-%s.log", r.LogbackendDir, instance.Namespace, instance.Name),
+		)
+
 		LBM.LogBackendSet(uniqueName, slb)
 		go slb.Start()
 
@@ -239,14 +252,12 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	klog.Infof("LogBackend.Update.old.stop[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, oldSlb)
 
 	// 开启新的
-	newSlb := &SingleLogBackend{
-		WriteQ:              make(chan string, instance.Spec.BufferSize),
-		BufferSize:          instance.Spec.BufferSize,
-		FlushSecondInterval: instance.Spec.FlushSecondInterval,
-		Name:                uniqueName,
-		FilePath:            fmt.Sprintf("%s-%s.log", instance.Namespace, instance.Name),
-		QuitQ:               make(chan struct{}),
-	}
+	newSlb := NewSingleLogBackend(
+		instance.Spec.BufferSize,
+		instance.Spec.FlushSecondInterval,
+		uniqueName,
+		fmt.Sprintf("%s/%s-%s.log", r.LogbackendDir, instance.Namespace, instance.Name),
+	)
 	LBM.LogBackendSet(uniqueName, newSlb)
 	go newSlb.Start()
 	klog.Infof("LogBackend.Update.new.start[ns:%v][LogBackend:%v][meta:%v]", req.Namespace, req.Name, newSlb)
@@ -297,12 +308,12 @@ func (sb *SingleLogBackend) Start() {
 				return
 			case <-flushTicker.C:
 				// TODO remove this 这里可以开个测试
-				for i := 0; i < 100; i++ {
-					line := fmt.Sprintf("%s-%d-%s-%s\n",
-						time.Now().Format("2006-01-02 15:04:05"),
-						i, sb.FilePath, "testlog")
-					writer.WriteString(line)
-				}
+				// for i := 0; i < 100; i++ {
+				//	line := fmt.Sprintf("%s-%d-%s-%s\n",
+				//		time.Now().Format("2006-01-02 15:04:05"),
+				//		i, sb.FilePath, "testlog")
+				//	writer.WriteString(line)
+				//}
 
 				writer.Flush()
 			}

@@ -21,12 +21,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	clientsetCore "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +40,59 @@ import (
 
 	logoperatorv1 "qi1999.io/logoperator/api/v1"
 )
+
+// 定义规则的本地管理器
+var CLM *CollectRuleManager
+
+// 初始化方法
+func init() {
+	InitCollectRuleManager()
+}
+
+// 初始化方法
+func InitCollectRuleManager() {
+	CLM = &CollectRuleManager{
+		CLMap: make(map[string]*SingleCollectRule),
+	}
+}
+
+// 基于map的管理器
+type CollectRuleManager struct {
+	CLMap map[string]*SingleCollectRule
+	sync.RWMutex
+}
+
+type SingleCollectRule struct {
+	Name          string                        // CollectRule的名字
+	Spec          logoperatorv1.CollectRuleSpec // CollectRule的Spec配置
+	Slb           *SingleLogBackend             // 对应写入后端
+	Ctx           context.Context               // context
+	QuitQ         chan struct{}                 // 退出的chan
+	CoreClientSet *clientsetCore.Clientset      // 操作core 对象的client
+
+	CollectPatternReg *regexp.Regexp `json:"-" yaml:"-" ` //给内部用的采集正则表达式
+	KeyWordPatternReg *regexp.Regexp `json:"-" yaml:"-" ` //给内部用的告警正则表达式
+
+}
+
+// map 的get set delete 方法
+func (lm *CollectRuleManager) CollectRuleGet(name string) (*SingleCollectRule, bool) {
+	lm.RLock()
+	defer lm.RUnlock()
+	obj, ok := lm.CLMap[name]
+	return obj, ok
+}
+func (lm *CollectRuleManager) CollectRuleSet(name string, sb *SingleCollectRule) {
+	lm.Lock()
+	defer lm.Unlock()
+	lm.CLMap[name] = sb
+}
+
+func (lm *CollectRuleManager) CollectRuleDelete(name string) {
+	lm.Lock()
+	defer lm.Unlock()
+	delete(lm.CLMap, name)
+}
 
 // CollectRuleReconciler reconciles a CollectRule object
 type CollectRuleReconciler struct {
@@ -151,4 +209,79 @@ func (r *CollectRuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&logoperatorv1.CollectRule{}).
 		Complete(r)
+}
+
+func (sr *SingleCollectRule) Stop() {
+	close(sr.QuitQ)
+}
+
+func (sr *SingleCollectRule) Start() {
+
+	// 处理新增的逻辑
+	//klog.Infof("[CollectRule.New.Add.success][ns:%v][CollectRule:%v]", req.Namespace, req.Name)
+	// 首先根据 yaml配置的labelSelector 获取对应的pod
+	ns := sr.Spec.TargetNamespace
+	watchHandler, err := sr.CoreClientSet.CoreV1().Pods(sr.Spec.TargetNamespace).Watch(sr.Ctx, metav1.ListOptions{
+		LabelSelector: labels.FormatLabels(sr.Spec.Selector),
+	})
+
+	if err != nil {
+		klog.Errorf("[ Failed to watch pods][ns:%v][CollectRule:%v][err:%v]", ns, sr.Name, err)
+		return
+	}
+
+	for {
+		select {
+		case <-sr.QuitQ:
+			klog.Infof("[ CollectRule.exit.readPodLog.exit][ns:%v][CollectRule:%v][err:%v]", ns, sr.Name, err)
+			return
+		default:
+			for event := range watchHandler.ResultChan() {
+				pod, ok := event.Object.(*corev1.Pod)
+				if !ok {
+					continue
+				}
+				// 判断event的类型
+				switch event.Type {
+				case watch.Added:
+					go func() {
+						// 获取logRequest.Stream
+						opts := &corev1.PodLogOptions{
+							Follow: true, // 对应kubectl logs -f参数
+						}
+						logRequest := sr.CoreClientSet.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, opts)
+						readCloser, err := logRequest.Stream(context.TODO())
+						if err != nil {
+							klog.Errorf("[pod.logRequest.Stream.err][ns:%v][CollectRule:%v][pod:%v][err:%v]", pod.Namespace, sr.Name, pod.Name, err)
+							return
+						}
+						defer readCloser.Close()
+						r := bufio.NewReader(readCloser)
+						for {
+							bytes, err := r.ReadBytes('\n')
+							if err != nil {
+								if err != io.EOF {
+									klog.Errorf("[CollectRule.New.pod.ReadLogs.err][ns:%v][CollectRule:%v][pod:%v][err:%v]", pod.Namespace, sr.Name, pod.Name, err)
+									break
+								}
+
+								break
+							}
+							newLine := fmt.Sprintf("[collectRule:%v podNs:%v pod:%v][%v]",
+								sr.Name,
+								pod.Namespace,
+								pod.Name,
+								string(bytes),
+							)
+							klog.Infof("[CollectRule.New.pod.GetLogs.line.print][ns:%v][CollectRule:%v][pod:%v][line:%v]", pod.Namespace, sr.Name, pod.Name, newLine)
+							sr.Slb.WriteQ <- newLine
+
+						}
+
+					}()
+				case watch.Deleted:
+				}
+			}
+		}
+	}
 }
