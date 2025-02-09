@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -89,7 +90,8 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// 这里不需要再判断是否是 未找到了，因为网络错误和未找到都相当于 lb不存在，需要再入队判断
 		klog.Errorf("[ get LogBackend for CollectRule error][err:%v][ns:%v][CollectRule:%v][lb:%v]", err, req.Namespace, req.Name, lbKey)
 		// return reconcile.Result{}, err
-		return reconcile.Result{Requeue: true}, nil
+		// return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		//return reconcile.Result{RequeueAfter: time.Second * 5}, nil
 	}
 
