@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -168,10 +169,24 @@ func (r *CollectRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		Ctx:           ctx,
 		QuitQ:         make(chan struct{}),
 	}
+
+	if instance.Spec.CollectPattern != "" {
+		scr.CollectPatternReg, _ = regexp.Compile(instance.Spec.CollectPattern)
+	}
+
+	if instance.Spec.LogAlert != nil {
+		scr.KeyWordPatternReg, _ = regexp.Compile(instance.Spec.LogAlert.KeyWordPattern)
+	}
+
+	// 获取Annotations中存储的spec对象，如果这个对象没有，说明就是新增
+	//
 	oldspec := &logoperatorv1.CollectRuleSpec{}
-	specStr, exists := instance.Annotations["spec"]
+	specStr, specExists := instance.Annotations["spec"]
+	_, localCrExists := CLM.CollectRuleGet(req.Name)
+
 	fmt.Println(oldspec, specStr)
-	if !exists {
+	// spec 或者本地map中不存在都认为是新增，防止控制器重启之前running 的实例没人管
+	if !specExists || !localCrExists {
 		go scr.Start()
 		CLM.CollectRuleSet(instance.Name, scr)
 		klog.Infof("[CollectRule.New.Add.success][ns:%v][CollectRule:%v	]", req.Namespace, req.Name)
@@ -226,6 +241,7 @@ func (sr *SingleCollectRule) Start() {
 						}
 						defer readCloser.Close()
 						r := bufio.NewReader(readCloser)
+
 						for {
 							bytes, err := r.ReadBytes('\n')
 							if err != nil {
@@ -236,11 +252,35 @@ func (sr *SingleCollectRule) Start() {
 
 								break
 							}
-							newLine := fmt.Sprintf("[collectRule:%v podNs:%v pod:%v][%v]",
+							oneline := strings.TrimRight(string(bytes), "\n")
+							//	 判断采集正则是否存在
+							if sr.CollectPatternReg != nil {
+								//	处理日志采集正则
+								v := sr.CollectPatternReg.FindStringSubmatch(oneline)
+
+								/*
+									## 处理日志主正则
+									- patternReg.FindStringSubmatch(line) 的结果v
+									- len=0 说明 正则没匹配中，应该丢弃这行
+									- len=1 说明 正则匹配中了，但是小括号分组没匹配到
+									- len>1 说明 正则匹配中了，小括号分组也匹配到
+								*/
+								if len(v) == 0 {
+									//	 正则没匹配中，应该丢弃这行
+									// 这里可以打一行丢弃的日志
+
+									klog.Infof("[CollectRule.New.pod.GetLogs.line.regex.not.match][ns:%v][CollectRule:%v][pod:%v][reg:%v][line:%v]", pod.Namespace, sr.Name, pod.Name, sr.CollectPatternReg, oneline)
+
+									continue
+								}
+
+							}
+
+							newLine := fmt.Sprintf("[collectRule:%v podNs:%v pod:%v][line:%v]",
 								sr.Name,
 								pod.Namespace,
 								pod.Name,
-								string(bytes),
+								oneline,
 							)
 							klog.Infof("[CollectRule.New.pod.GetLogs.line.print][ns:%v][CollectRule:%v][pod:%v][line:%v]", pod.Namespace, sr.Name, pod.Name, newLine)
 							sr.Slb.WriteQ <- newLine

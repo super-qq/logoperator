@@ -180,8 +180,10 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	//
 	// oldspec := &logoperatorv1.LogBackendSpec{}
 	// specStr,
-	specStr, exists := instance.Annotations["spec"]
-	if !exists {
+	oldspec := &logoperatorv1.LogBackendSpec{}
+	specStr, specExists := instance.Annotations["spec"]
+	_, slbExists := LBM.LogBackendGet(uniqueName)
+	if !specExists || !slbExists {
 
 		klog.Infof("[LogBackend.New.Add.success][ns:%v][LogBackend:%v]", err, req.Namespace, req.Name)
 		// 说明就是新增,处理新增的逻辑
@@ -223,7 +225,6 @@ func (r *LogBackendReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	oldspec := &logoperatorv1.LogBackendSpec{}
 	// 走到这里说明spec str存在，需要对比一下是否变更了
 	if err := json.Unmarshal([]byte(specStr), &oldspec); err != nil {
 		klog.Errorf("[LogBackend.oldspec.json.Unmarshal.err][ns:%v][LogBackend:%v][err:%v]", req.Namespace, req.Name, err)
