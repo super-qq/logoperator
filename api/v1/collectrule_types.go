@@ -38,8 +38,9 @@ type CollectRuleSpec struct {
 }
 
 type LogAlertObj struct {
-	Url            string `json:"url"`
-	KeyWordPattern string `json:"keyWordPattern"` // 配置的告警正则表达式
+	Url            string   `json:"url"`
+	KeyWordPattern string   `json:"keyWordPattern"` // 配置的告警正则表达式
+	AtMobiles      []string `json:"atMobiles"`      // 钉钉at手机号
 	//KeyWordPatternReg *regexp.Regexp `json:"-" yaml:"-" `    //给内部用的告警正则表达式
 }
 

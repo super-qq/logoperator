@@ -18,9 +18,12 @@ package controllers
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -41,6 +44,8 @@ import (
 
 	logoperatorv1 "qi1999.io/logoperator/api/v1"
 )
+
+const DingAlertTitle = "logoperator钉钉告警"
 
 // 定义规则的本地管理器
 var CLM *CollectRuleManager
@@ -93,6 +98,44 @@ func (lm *CollectRuleManager) CollectRuleDelete(name string) {
 	lm.Lock()
 	defer lm.Unlock()
 	delete(lm.CLMap, name)
+}
+
+// 发送钉钉消息的结构体
+type dingMsgNew struct {
+	Msgtype string  `json:"msgtype"`
+	Text    content `json:"text"`
+	At      at      `json:"at"`
+}
+type content struct {
+	Content string `json:"content"`
+}
+type at struct {
+	AtMobiles []string `json:"atMobiles"`
+}
+
+func DingDingMsgDirectSend(app, msg string, apiUrl string, atMobiles []string) {
+
+	dm := dingMsgNew{Msgtype: "text"}
+	dm.Text.Content = fmt.Sprintf("[%s]\n[app=%s]\n"+
+		"[日志详情:%s ]", DingAlertTitle, app, msg)
+	dm.At.AtMobiles = atMobiles
+	bs, err := json.Marshal(dm)
+	if err != nil {
+		klog.Errorf(
+			"[msg:dingding.msg.json.Marshal.error][dm:%v][err:%v]", dm, err)
+		return
+	}
+	res, err := http.Post(apiUrl, "application/json", bytes.NewBuffer(bs))
+	if err != nil {
+		klog.Errorf("[send.dingding.error][err:%v][msg:v]", err, msg)
+		return
+	}
+	if res != nil && res.StatusCode != 200 {
+		klog.Errorf("[send.dingding.status_code.error][code:%v][msg:v]", res.StatusCode, msg)
+		return
+	}
+	klog.Infof("[send.dingding.success][code:%v][msg:v]", res.StatusCode, msg)
+
 }
 
 // CollectRuleReconciler reconciles a CollectRule object
@@ -253,6 +296,34 @@ func (sr *SingleCollectRule) Start() {
 								break
 							}
 							oneline := strings.TrimRight(string(bytes), "\n")
+
+							// 将这个告警正则匹配放到主正则的上面，避免被主正则过滤
+							if sr.KeyWordPatternReg != nil {
+								//	处理日志采集正则
+								v := sr.KeyWordPatternReg.FindStringSubmatch(oneline)
+
+								/*
+									## 处理日志主正则
+									- patternReg.FindStringSubmatch(line) 的结果v
+									- len=0 说明 正则没匹配中，应该丢弃这行
+									- len=1 说明 正则匹配中了，但是小括号分组没匹配到
+									- len>1 说明 正则匹配中了，小括号分组也匹配到
+								*/
+								if len(v) > 0 {
+									//	正则匹配中，应该处理发送这一行
+									// 这里可以打一行匹配命中的日志
+									klog.Infof("[CollectRule.New.pod.GetLogs.line.keyWordRegex.need.send][ns:%v][CollectRule:%v][pod:%v][reg:%v][line:%v]", pod.Namespace, sr.Name, pod.Name, sr.KeyWordPatternReg, oneline)
+
+									//构造app
+									app := fmt.Sprintf("[podNs:%v pod:%v]", pod.Namespace,
+										pod.Name)
+									// 异步发送
+									go sr.sendDingDing(app, oneline)
+
+								}
+
+							}
+
 							//	 判断采集正则是否存在
 							if sr.CollectPatternReg != nil {
 								//	处理日志采集正则
@@ -293,6 +364,13 @@ func (sr *SingleCollectRule) Start() {
 			}
 		}
 	}
+}
+
+//给这个结构体绑定一个方法发送钉钉告警
+
+func (sr *SingleCollectRule) sendDingDing(app, msg string) {
+	DingDingMsgDirectSend(app, msg, sr.Spec.LogAlert.Url, sr.Spec.LogAlert.AtMobiles)
+
 }
 
 // SetupWithManager sets up the controller with the Manager.
