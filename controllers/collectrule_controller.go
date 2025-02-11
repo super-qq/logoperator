@@ -322,7 +322,7 @@ func (sr *SingleCollectRule) Start() {
 
 								}
 
-							}
+							}1
 
 							//	 判断采集正则是否存在
 							if sr.CollectPatternReg != nil {
