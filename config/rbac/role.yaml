@@ -1,0 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - collectrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - collectrules/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - collectrules/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - logbackends
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - logbackends/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - logoperator.qi1999.io
+  resources:
+  - logbackends/status
+  verbs:
+  - get
+  - patch
+  - update
